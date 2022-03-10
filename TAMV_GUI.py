@@ -1484,7 +1484,15 @@ class App(QMainWindow):
             self.loose_box.setVisible(False)
             self.updateStatusbar('Detection: OFF')
 
-    def cleanPrinterURL(self, inputString='http://localhost'):
+    def cleanPrinterURL(self, inputString='/tmp/klippy_uds'):
+        if not isinstance(inputString, str):
+            return( 1, 'Invalid printer Local Unix domain socket', '' )
+        elif len(inputString) < 2:
+            return( 1, 'Invalid printer Local Unix domain socket', '' )
+        else:
+            return( 0, '', inputString )
+            
+        '''
         _errCode = 0
         _errMsg = ''
         #_printerURL = 'http://localhost'
@@ -1493,7 +1501,6 @@ class App(QMainWindow):
         u = urlparse(inputString)
         scheme = u[0]
         netlocation = u[1]
-        '''
         if len(scheme) < 4 or scheme.lower() not in ['http']:
             _errCode = 1
             _errMsg = 'Invalid scheme. Please only use http connections.'
@@ -1505,8 +1512,9 @@ class App(QMainWindow):
             _errMsg = 'Cannot use https connections for Duet controllers'
         else:
             _printerURL = scheme + '://' + netlocation
-        '''
         return( _errCode, _errMsg, _printerURL )
+        '''
+        
 
     def loadUserParameters(self):
         global camera_width, camera_height, video_src
@@ -1523,9 +1531,9 @@ class App(QMainWindow):
             ( _errCode, _errMsg, self.printerURL ) = self.cleanPrinterURL(tempURL)
             if _errCode > 0:
                 # invalid input
-                print('Invalid printer URL detected in settings.json!')
-                print('Defaulting to \"http://localhost\"...')
-                self.printerURL = 'http://localhost'
+                print('Invalid printer Local Unix domain socket detected in settings.json!')
+                print('Defaulting to \"/tmp/klippy_uds"...')
+                self.printerURL = '/tmp/klippy_uds'
         except FileNotFoundError:
             # create parameter file with standard parameters
             options = {}
@@ -1537,7 +1545,7 @@ class App(QMainWindow):
             } )
             options['printer'] = []
             options['printer'].append( {
-                'address': 'http://localhost',
+                'address': '/tmp/klippy_uds',
                 'name': 'Hermoine'
             } )
             try:
@@ -1679,7 +1687,7 @@ class App(QMainWindow):
     def connectToPrinter(self):
         # temporarily suspend GUI and display status message
         self.image_label.setText('Waiting to connect..')
-        self.updateStatusbar('Please enter machine IP address or name prefixed with http(s)://')
+        self.updateStatusbar('Please enter Local Unix domain socket for Klipper')
         self.connection_button.setDisabled(True)
         self.disconnection_button.setDisabled(True)
         self.calibration_button.setDisabled(True)
@@ -1704,15 +1712,15 @@ class App(QMainWindow):
                 None
         except Exception:
             # printerURL initalization to defaults
-            self.printerURL = 'http://localhost'
+            self.printerURL = '/tmp/klippy_uds'
         # Prompt user for machine connection address
-        text, ok = QInputDialog.getText(self, 'Machine URL','Machine IP address or hostname: ', QLineEdit.Normal, self.printerURL)
+        text, ok = QInputDialog.getText(self, 'Klipper UDS','Local Unix domain socket for Klipper: ', QLineEdit.Normal, self.printerURL)
         # Handle clicking OK/Connect
         if ok and text != '' and len(text) > 5:
             ( _errCode, _errMsg, tempURL ) = self.cleanPrinterURL(text)
             while _errCode != 0:
                 # Invalid URL detected, pop-up window to correct this
-                text, ok = QInputDialog.getText(self, 'Machine URL', _errMsg + '\nMachine IP address or hostname: ', QLineEdit.Normal, text)
+                text, ok = QInputDialog.getText(self, 'Klipper UDS', _errMsg + '\nLocal Unix domain socket for Klipper: ', QLineEdit.Normal, text)
                 if ok:
                     ( _errCode, _errMsg, tempURL ) = self.cleanPrinterURL(text)
                 else:
@@ -1728,7 +1736,7 @@ class App(QMainWindow):
             return
         # Handle invalid input
         elif len(text) < 6 or text[:4] not in ['http']:
-            self.updateStatusbar('Invalid IP address or hostname: \"' + text +'\". Add http(s):// to try again.')
+            self.updateStatusbar('Invalid UDS: \"' + text )
             self.resetConnectInterface()
             return
         # Update user with new state
@@ -1739,7 +1747,7 @@ class App(QMainWindow):
             self.printer = KA.KlipperAPI(self.printerURL)
             if not self.printer.printerType():
                 # connection failed for some reason
-                self.updateStatusbar('Device at '+self.printerURL+' either did not respond or is not a Duet V2 or V3 printer.')
+                self.updateStatusbar('Device at '+self.printerURL+' might not be a Klipper UDS.')
                 self.resetConnectInterface()
                 return
             else:

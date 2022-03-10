@@ -1676,8 +1676,8 @@ class App(QMainWindow):
             if self.printer.isIdle():
                 tempCoords = self.printer.getCoords()
                 #self.printer.gCode('T-1')
-                self.printer.gCode('TOOL_DROPOFF')
-                self.printer.gCode('G1 X' + str(tempCoords['X']) + ' Y' + str(tempCoords['Y']))
+#                self.printer.gCode('TOOL_DROPOFF')
+#                self.printer.gCode('G1 X' + str(tempCoords['X']) + ' Y' + str(tempCoords['Y']))
         except Exception as ce1: None # no printer connected usually.
         print()
         print('Thank you for using TAMV!')
@@ -1753,31 +1753,33 @@ class App(QMainWindow):
             else:
                 # connection succeeded, update objects accordingly
                 self._connected_flag = True
-                self.num_tools = self.printer.getNumTools()
+                self.tools = self.printer.getTools()
+                self.num_tools = len(self.tools)
                 self.video_thread.numTools = self.num_tools
                 # UPDATE OFFSET INFORMATION
                 self.offsets_box.setVisible(True)
                 self.offsets_table.setRowCount(self.num_tools)
                 for i in range(self.num_tools):
-                    current_tool = self.printer.getG10ToolOffset(i)
+                    current_tool = self.printer.getG10ToolOffset(self.tools[i])
                     offset_x = "{:.3f}".format(current_tool['X'])
                     offset_y = "{:.3f}".format(current_tool['Y'])
                     x_tableitem = QTableWidgetItem(offset_x)
                     y_tableitem = QTableWidgetItem(offset_y)
                     x_tableitem.setBackground(QColor(255,255,255,255))
                     y_tableitem.setBackground(QColor(255,255,255,255))
-                    self.offsets_table.setVerticalHeaderItem(i,QTableWidgetItem('T'+str(i)))
+                    self.offsets_table.setVerticalHeaderItem(i,QTableWidgetItem('qT'+str(self.tools[i])))
                     self.offsets_table.setItem(i,0,x_tableitem)
                     self.offsets_table.setItem(i,1,y_tableitem)
                     # add tool buttons
-                    toolButton = QPushButton('T'+str(i))
-                    toolButton.setToolTip('Fetch T' + str(i) + ' to current machine position.')
+                    toolButton = QPushButton('T'+str(self.tools[i]))
+                    toolButton.setToolTip('Fetch T' +str(self.tools[i]) + ' to current machine position.')
                     self.toolButtons.append(toolButton)
         except Exception as conn1:
             self.updateStatusbar('Cannot connect to: ' + self.printerURL )
             print('Duet Connection exception: ', conn1)
             self.resetConnectInterface()
             return
+        
         # Get active tool
         _active = self.printer.getCurrentTool()
         # Display toolbox
@@ -1821,8 +1823,11 @@ class App(QMainWindow):
 
         # update buttons to new status
         for button in self.toolButtons:
-            button.setChecked(False)
-        self.toolButtons[int(self.sender().text()[1:])].setChecked(True)
+            if button.text() == self.sender().text():
+                button.setChecked(True)
+            else:
+                button.setChecked(False)
+#        self.toolButtons[int(self.sender().text()[1:])].setChecked(True)
 
         # handle tool already active on printer
         if int(_active) == int(sender.text()[1:]):

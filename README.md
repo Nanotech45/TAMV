@@ -2,6 +2,7 @@
 Please refer to the main TAMV branch for usage/installation. 
 
 For use with Klipper machines running https://github.com/SteveJWallace/JubileeKlipper
+And the Klipper_Toolchanger modules at https://github.com/TypQxQ/Klipper_ToolChanger
 
 Use the address of the Klipper Local Unix domain socket.
 Default is ``/tmp/klippy_uds``.

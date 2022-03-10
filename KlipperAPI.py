@@ -243,30 +243,7 @@ class KlipperAPI:
             self._webhook_socket.send(b"%s\x03" % (cm,))
         except:
             sys.stderr.write("ERROR: Unable to parse data\n")
-    
-    def get_current_tool(self, axis=None):
-        self.increment_id()
-        self.send_current_tool_request(self.id)
-        j = json.loads(self.wait_for_response())
-        if str(j['id']) != str(self.id):
-            return 'error: Incorrect ID returned'
-        if 'error' in j:
-            j = j['error']['message']
-            return 'error: '+str(j)
-        elif 'result' in j:
-            j = j['result']['status']['toolhead']['extruder']
-            if j == 'extruder':
-                return 0
-            elif j == 'extruder1':
-                return 1
-            elif j == 'extruder2':
-                return 2
-            elif j == 'extruder3':
-                return 3
-            else:
-                return -1
-        return -1
-    
+   
     def send_tool_offset_request(self, id,  tool):
         request = self.format_tool_offset_request(id,tool)
         try:
@@ -288,48 +265,8 @@ class KlipperAPI:
             j = j['error']['message']
             return 'error: '+str(j)
         elif 'result' in j:
-            j = j['result']
-            j = j['status']
-            j = j['tool '+str(tool_num)]
-            j = j['offset']
-
-
-        return j#[0,0,0] # Temp Offset list.
-
-
-
-
-        self.config_location = self.get_config_location()
-        if tool_num is None:
-            tool_num = self.get_current_tool()
-        search_text = '[gcode_macro T'+ str(tool_num) + ']'
-        if 'printer.cfg' in self.config_location:
-            self.config_location = self.config_location.replace('printer.cfg', 'TOOLS.cfg')
-        try:
-            offset_x = 'null'
-            offset_y = 'null'
-            offset_z = 'null'
-            with open(self.config_location, 'r') as file:
-                line = file.readline()
-                while line != '':
-                    if search_text in line:
-                        line = file.readline()
-                        if 'gcode:' in line:
-                            line = file.readline()
-                            elements = line.split()
-                            for i, elem in enumerate(elements):
-                                if 'OFFSET_X=' in elem:
-                                    offset_x = elem.replace('OFFSET_X=', '')
-                                elif 'OFFSET_Y=' in elem:
-                                    offset_y = elem.replace('OFFSET_Y=', '')
-                                elif 'OFFSET_Z=' in elem:
-                                    offset_z = elem.replace('OFFSET_Z=', '')
-                    else:
-                        line = file.readline()
-            offset_list = [offset_x, offset_y, offset_z]
-            return offset_list
-        except:
-            return -1
+            j = j['result']['status']['tool '+str(tool_num)]['offset']
+        return j
     
     def set_tool_offset(self, tool_num, newX=None, newY=None, newZ=None):
         current_offset = self.get_tool_offset(tool_num)

@@ -631,7 +631,10 @@ class CalibrateNozzles(QThread):
                         while self._running:
                             self.cycles = self.parent().cycles
                             for rep in range(self.cycles):
-                                for tool in range(self.parent().num_tools):
+                                for j,button in enumerate(self.parent().toolButtons):
+                                    tool = int(button.text().replace('T', ''))
+
+#                                for tool in range(self.parent().num_tools):
                                     # process GUI events
                                     app.processEvents()
                                     # Update status bar
@@ -2341,7 +2344,10 @@ class App(QMainWindow):
         self.loose_box.setVisible(True)
         self.toolBox.setVisible(False)
         self.detect_box.setVisible(False)
-        for i in range(self.num_tools):
+
+        for j,button in enumerate(self.toolButtons):
+            i = int(button.text().replace('T', ''))
+#        for i in range(self.num_tools):
             current_tool = self.printer.getG10ToolOffset(i)
             x_tableitem = QTableWidgetItem("{:.3f}".format(current_tool['X']))
             y_tableitem = QTableWidgetItem("{:.3f}".format(current_tool['Y']))

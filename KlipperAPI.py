@@ -5,7 +5,7 @@
 # Modified by Nanotech in April 2021 to be used for Klipper communications
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import sys, os, socket, fcntl, select, json, errno, time
+import sys, os, socket, fcntl, select, json, errno, time, re
 
 class KlipperAPI:
     _socketAddress = ''
@@ -71,6 +71,13 @@ class KlipperAPI:
     def format_objects_list(self, id):
         return '{"id": '+str(id)+', "method": "objects/list"}'
     
+    def format_curenttool_request(self, id):
+        return '{"id": '+str(id)+', "method": "objects/query", "params": {"objects": {"toollock": ["tool_current"]}}}'
+
+    def format_tool_offset_request(self, id, tool):
+        return '{"id": '+str(id)+', "method": "objects/query", "params": {"objects": {"tool '+str(tool)+'": ["offset"]}}}'
+
+   
     def wait_for_response(self):
         wait = True
         while(wait):
@@ -98,7 +105,7 @@ class KlipperAPI:
         try:
             m = json.loads(request)
             cm = json.dumps(m, separators=(',', ':'))
-            #sys.stdout.write("SEND: %s\n" % (cm,))
+            sys.stdout.write("SEND: %s\n" % (cm,))
             cm=cm.encode()
             self._webhook_socket.send(b"%s\x03" % (cm,))
         except:
@@ -129,7 +136,7 @@ class KlipperAPI:
         try:
             m = json.loads(request)
             cm = json.dumps(m, separators=(',', ':'))
-            #sys.stdout.write("SEND: %s\n" % (cm,))
+            sys.stdout.write("SEND: %s\n" % (cm,))
             cm=cm.encode()
             self._webhook_socket.send(b"%s\x03" % (cm,))
         except:
@@ -155,7 +162,7 @@ class KlipperAPI:
         try:
             m = json.loads(request)
             cm = json.dumps(m, separators=(',', ':'))
-            #sys.stdout.write("SEND: %s\n" % (cm,))
+            sys.stdout.write("SEND: %s\n" % (cm,))
             cm=cm.encode()
             self._webhook_socket.send(b"%s\x03" % (cm,))
         except:
@@ -193,7 +200,7 @@ class KlipperAPI:
         try:
             m = json.loads(request)
             cm = json.dumps(m, separators=(',', ':'))
-            #sys.stdout.write("SEND: %s\n" % (cm,))
+            sys.stdout.write("SEND: %s\n" % (cm,))
             cm=cm.encode()
             self._webhook_socket.send(b"%s\x03" % (cm,))
         except:
@@ -231,16 +238,26 @@ class KlipperAPI:
         try:
             m = json.loads(request)
             cm = json.dumps(m, separators=(',', ':'))
-            #sys.stdout.write("SEND: %s\n" % (cm,))
+            sys.stdout.write("SEND: %s\n" % (cm,))
             cm=cm.encode()
             self._webhook_socket.send(b"%s\x03" % (cm,))
         except:
             sys.stderr.write("ERROR: Unable to parse data\n")
-    
-    def get_current_tool(self, axis=None):
-        # Currently only supports up to 4 extruders. Add more if needed
+   
+    def send_tool_offset_request(self, id,  tool):
+        request = self.format_tool_offset_request(id,tool)
+        try:
+            m = json.loads(request)
+            cm = json.dumps(m, separators=(',', ':'))
+            sys.stdout.write("SEND: %s\n" % (cm,))
+            cm=cm.encode()
+            self._webhook_socket.send(b"%s\x03" % (cm,))
+        except:
+            sys.stderr.write("ERROR: Unable to parse data\n")
+
+    def get_tool_offset(self, tool_num=None):
         self.increment_id()
-        self.send_current_tool_request(self.id)
+        self.send_tool_offset_request(self.id, tool_num)
         j = json.loads(self.wait_for_response())
         if str(j['id']) != str(self.id):
             return 'error: Incorrect ID returned'
@@ -248,51 +265,8 @@ class KlipperAPI:
             j = j['error']['message']
             return 'error: '+str(j)
         elif 'result' in j:
-            j = j['result']['status']['toolhead']['extruder']
-            if j == 'extruder':
-                return 0
-            elif j == 'extruder1':
-                return 1
-            elif j == 'extruder2':
-                return 2
-            elif j == 'extruder3':
-                return 3
-            else:
-                return -1
-        return -1
-    
-    def get_tool_offset(self, tool_num=None):
-        self.config_location = self.get_config_location()
-        if tool_num is None:
-            tool_num = self.get_current_tool()
-        search_text = '[gcode_macro T'+ str(tool_num) + ']'
-        if 'printer.cfg' in self.config_location:
-            self.config_location = self.config_location.replace('printer.cfg', 'TOOLS.cfg')
-        try:
-            offset_x = 'null'
-            offset_y = 'null'
-            offset_z = 'null'
-            with open(self.config_location, 'r') as file:
-                line = file.readline()
-                while line != '':
-                    if search_text in line:
-                        line = file.readline()
-                        if 'gcode:' in line:
-                            line = file.readline()
-                            elements = line.split()
-                            for i, elem in enumerate(elements):
-                                if 'OFFSET_X=' in elem:
-                                    offset_x = elem.replace('OFFSET_X=', '')
-                                elif 'OFFSET_Y=' in elem:
-                                    offset_y = elem.replace('OFFSET_Y=', '')
-                                elif 'OFFSET_Z=' in elem:
-                                    offset_z = elem.replace('OFFSET_Z=', '')
-                    else:
-                        line = file.readline()
-            offset_list = [offset_x, offset_y, offset_z]
-            return offset_list
-        except:
-            return -1
+            j = j['result']['status']['tool '+str(tool_num)]['offset']
+        return j
     
     def set_tool_offset(self, tool_num, newX=None, newY=None, newZ=None):
         current_offset = self.get_tool_offset(tool_num)
@@ -381,15 +355,15 @@ class KlipperAPI:
         try:
             m = json.loads(request)
             cm = json.dumps(m, separators=(',', ':'))
-            #sys.stdout.write("SEND: %s\n" % (cm,))
+            sys.stdout.write("SEND: %s\n" % (cm,))
             cm=cm.encode()
             self._webhook_socket.send(b"%s\x03" % (cm,))
         except:
             sys.stderr.write("ERROR: Unable to parse data\n")
     
-    def get_num_extruders(self):
-        # Currently only supports up to 4 extruders. Add more if needed
+    def get_tools(self):
         self.increment_id()
+        tools = list()
         self.send_num_extruders_request(self.id)
         j = json.loads(self.wait_for_response())
         if str(j['id']) != str(self.id):
@@ -398,13 +372,30 @@ class KlipperAPI:
             j = j['error']['message']
             return 'error: '+str(j)
         elif 'result' in j:
-            j = j['result']['objects']
-            count = 0
-            if 'extruder' in j: count += 1
-            if 'extruder1' in j: count += 1
-            if 'extruder2' in j: count += 1
-            if 'extruder3' in j: count += 1
-            return(count)
+            for t in j['result']['objects']:
+                if re.match("tool \d+", str.lower(t)):
+                    tools.append(t.split(" ")[1])
+            return(tools)
+
+#    def get_num_extruders(self):
+#        return 'error: nOT Implemented'
+#        # Currently only supports up to 4 extruders. Add more if needed
+#        self.increment_id()
+#        self.send_num_extruders_request(self.id)
+#        j = json.loads(self.wait_for_response())
+#        if str(j['id']) != str(self.id):
+#            return 'error: Incorrect ID returned'
+#        if 'error' in j:
+#            j = j['error']['message']
+#            return 'error: '+str(j)
+#        elif 'result' in j:
+#            j = j['result']['objects']
+#            count = 0
+#            if 'extruder' in j: count += 1
+#            if 'extruder1' in j: count += 1
+#            if 'extruder2' in j: count += 1
+#            if 'extruder3' in j: count += 1
+#            return(count)
     
     def get_config_directory(self):
         self.increment_id()
@@ -492,12 +483,16 @@ class KlipperAPI:
         zVal = round(float(to[2]),3)
         return ({'X':xVal,'Y':yVal,'Z':zVal})
     
-    def getNumExtruders(self):
-        return int(self.get_num_extruders())
+#    def getNumExtruders(self):
+#        return int(self.get_num_extruders())
+#    
+#    def getNumTools(self):
+#        return int(self.get_num_extruders())
     
-    def getNumTools(self):
-        return int(self.get_num_extruders())
-    
+    def getTools(self):
+        #return int(self.get_tools())
+        return self.get_tools()
+
     def getStatus(self):
         return self.get_status()
     

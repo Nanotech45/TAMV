@@ -3,6 +3,8 @@ Please refer to the main TAMV branch for usage/installation.
 
 For use with Klipper machines running https://github.com/SteveJWallace/JubileeKlipper
 
+And the Klipper_Toolchanger modules at https://github.com/TypQxQ/Klipper_ToolChanger
+
 See instalation instructions at maintained original: https://github.com/HaythamB/TAMV
 
 Use the address of the Klipper Local Unix domain socket.

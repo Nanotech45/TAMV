@@ -5,7 +5,9 @@ For use with Klipper machines running https://github.com/SteveJWallace/JubileeKl
 
 And the Klipper_Toolchanger modules at https://github.com/TypQxQ/Klipper_ToolChanger
 
+See instalation instructions at maintained original: https://github.com/HaythamB/TAMV
+
 Use the address of the Klipper Local Unix domain socket.
 Default is ``/tmp/klippy_uds``.
 
-Tool offset data must be stored in a seperate configuration file in the same director as your main printer.cfg file. This includes your T0, T1, etc macros. 
+Tool offset are not saved automaticly at the moment.

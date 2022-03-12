@@ -515,6 +515,7 @@ class CalibrateNozzles(QThread):
     _running = False
     display_crosshair = False
     detection_on = False
+    align_one_tool = False
 
     def __init__(self, parent=None, th1=1, th2=50, thstep=1, minArea=600, minCircularity=0.8,numTools=0,cycles=1, align=False):
         super(QThread,self).__init__(parent=parent)
@@ -529,6 +530,7 @@ class CalibrateNozzles(QThread):
         self.detect_minArea = minArea
         self.detect_minCircularity = minCircularity
         self.numTools = numTools
+        self.toolNames = []
         self.cycles = cycles
         self.alignment = align
         self.message_update.emit('Detector created, waiting for tool..')
@@ -536,6 +538,7 @@ class CalibrateNozzles(QThread):
         # start with detection off
         self.display_crosshair = False
         self.detection_on = False
+        self.align_one_tool = False
 
         # Video Parameters
         self.brightness_default = 0
@@ -631,16 +634,23 @@ class CalibrateNozzles(QThread):
                         while self._running:
                             self.cycles = self.parent().cycles
                             for rep in range(self.cycles):
-                                for j,button in enumerate(self.parent().toolButtons):
-                                    tool = int(button.text().replace('T', ''))
+#                                if self.align_one_tool == False:
+#                                _tools_to_align = self.parent().toolNames
+#                                else:
+#                                    _tools_to_align = []
+#                                    for button in self.toolButtons:
+#                                        if button.isChecked():
+#                                            _tools_to_align.append(button)
 
-#                                for tool in range(self.parent().num_tools):
+                                for j,tool in enumerate(self.toolNames):
+#                                    tool = int(button.text().replace('T', ''))
+                                #for tool in range(self.parent().num_tools):
                                     # process GUI events
                                     app.processEvents()
                                     # Update status bar
-                                    self.status_update.emit('Calibrating T' + str(tool) + ', cycle: ' + str(rep+1) + '/' + str(self.cycles))
+                                    self.status_update.emit('Calibrating T' + tool + ', cycle: ' + str(rep+1) + '/' + str(self.cycles))
                                     # Load next tool for calibration
-                                    self.parent().printer.gCode('T'+str(tool))
+                                    self.parent().printer.gCode('T'+tool)
                                     # Move tool to CP coordinates
                                     self.parent().printer.gCode('G1 X' + str(self.parent().cp_coords['X']))
                                     self.parent().printer.gCode('G1 Y' + str(self.parent().cp_coords['Y']))
@@ -674,11 +684,11 @@ class CalibrateNozzles(QThread):
                                         self.createDetector()
                                         self.detector_changed = False
                                     # Analyze frame for blobs
-                                    (c, transform, mpp) = self.calibrateTool(tool, rep)
+                                    (c, transform, mpp) = self.calibrateTool(int(tool), rep)
                                     # process GUI events
                                     app.processEvents()
                                     # apply offsets to machine
-                                    self.parent().printer.gCode( 'G10 P' + str(tool) + ' X' + str(c['X']) + ' Y' + str(c['Y']) )
+                                    self.parent().printer.gCode( 'G10 P' + tool + ' X' + str(c['X']) + ' Y' + str(c['Y']) )
                             # signal end of execution
                             self._running = False
                         # Update status bar
@@ -1101,12 +1111,13 @@ class CalibrateNozzles(QThread):
         self._running = False
         self.detection_on = False
         try:
-            tempCoords = self.printer.getCoords()
+#            tempCoords = self.printer.getCoords()
             if self.printer.isIdle():
-                #self.printer.gCode('T-1')
-                self.printer.gCode('TOOL_DROPOFF')
-                self.parent().printer.gCode('G1 X' + str(tempCoords['X']) + ' Y' + str(tempCoords['Y']))
-                #while self.parent().printer.getStatus() not in 'idle':
+                self.parent().changTool(None)
+#                #self.printer.gCode('T-1')
+#                self.printer.gCode('TOOL_DROPOFF')
+#                self.parent().printer.gCode('G1 X' + str(tempCoords['X']) + ' Y' + str(tempCoords['Y']))
+#                #while self.parent().printer.getStatus() not in 'idle':
                 while self.parent().printer.getStatus() not in 'ready':
                     time.sleep(1)
         except: None
@@ -1365,13 +1376,20 @@ class App(QMainWindow):
         self.cp_button.setFixedWidth(170)
         #self.cp_button.setStyleSheet(style_disabled)
         self.cp_button.setDisabled(True)
-        # Calibration
-        self.calibration_button = QPushButton('Start Tool Alignment')
+        # Calibration Auto
+        self.calibration_button = QPushButton('Auto Tool Alignment')
         self.calibration_button.setToolTip('Start alignment process.\nMAKE SURE YOUR CARRIAGE IS CLEAR TO MOVE ABOUT WITHOUT COLLISIONS!')
         self.calibration_button.clicked.connect(self.runCalibration)
         #self.calibration_button.setStyleSheet(style_disabled)
         self.calibration_button.setDisabled(True)
         self.calibration_button.setFixedWidth(170)
+        # Calibration One Tool
+        self.calibrate_button = QPushButton('Tool Alignment loaded tool')
+        self.calibrate_button.setToolTip('Start alignment process for only currently loaded tool.\nMAKE SURE YOUR CARRIAGE IS CLEAR TO MOVE ABOUT WITHOUT COLLISIONS!')
+        self.calibrate_button.clicked.connect(self.runCalibration)
+        #self.calibrate_button.setStyleSheet(style_disabled)
+        self.calibrate_button.setDisabled(True)
+        self.calibrate_button.setFixedWidth(200)
         # Jog Panel
         self.jogpanel_button = QPushButton('Jog Panel')
         self.jogpanel_button.setToolTip('Open a control panel to move carriage.')
@@ -1463,8 +1481,9 @@ class App(QMainWindow):
         # FOURTH ROW
         grid.addWidget(self.cp_button,7,1,1,1)
         grid.addWidget(self.calibration_button,7,2,1,1)
-        grid.addWidget(self.repeat_label,7,3,1,1)
-        grid.addWidget(self.repeatSpinBox,7,4,1,1)
+        grid.addWidget(self.calibrate_button,7,3,1,1)
+        grid.addWidget(self.repeat_label,7,4,1,1)
+        grid.addWidget(self.repeatSpinBox,7,5,1,1)
         # set the grid layout as the widgets layout
         self.centralWidget.setLayout(grid)
         # start video feed
@@ -1677,8 +1696,9 @@ class App(QMainWindow):
     def closeEvent(self, event):
         try:
             if self.printer.isIdle():
-                tempCoords = self.printer.getCoords()
-                #self.printer.gCode('T-1')
+                self.changeTool(None)
+#                tempCoords = self.printer.getCoords()
+#                #self.printer.gCode('T-1')
 #                self.printer.gCode('TOOL_DROPOFF')
 #                self.printer.gCode('G1 X' + str(tempCoords['X']) + ' Y' + str(tempCoords['Y']))
         except Exception as ce1: None # no printer connected usually.
@@ -1694,6 +1714,7 @@ class App(QMainWindow):
         self.connection_button.setDisabled(True)
         self.disconnection_button.setDisabled(True)
         self.calibration_button.setDisabled(True)
+        self.calibrate_button.setDisabled(True)
         self.cp_button.setDisabled(True)
         self.jogpanel_button.setDisabled(True)
         self.offsets_box.setVisible(False)
@@ -1770,7 +1791,7 @@ class App(QMainWindow):
                     y_tableitem = QTableWidgetItem(offset_y)
                     x_tableitem.setBackground(QColor(255,255,255,255))
                     y_tableitem.setBackground(QColor(255,255,255,255))
-                    self.offsets_table.setVerticalHeaderItem(i,QTableWidgetItem('qT'+str(self.tools[i])))
+                    self.offsets_table.setVerticalHeaderItem(i,QTableWidgetItem('T'+str(self.tools[i])))
                     self.offsets_table.setItem(i,0,x_tableitem)
                     self.offsets_table.setItem(i,1,y_tableitem)
                     # add tool buttons
@@ -1804,6 +1825,7 @@ class App(QMainWindow):
         # enable/disable buttons
         self.connection_button.setDisabled(True)
         self.calibration_button.setDisabled(True)
+        self.calibrate_button.setDisabled(True)
         self.disconnection_button.setDisabled(False)
         self.cp_button.setDisabled(False)
         self.jogpanel_button.setDisabled(False)
@@ -1826,7 +1848,7 @@ class App(QMainWindow):
 
         # update buttons to new status
         for button in self.toolButtons:
-            if button.text() == self.sender().text():
+            if button.text() == sender.text():
                 button.setChecked(True)
             else:
                 button.setChecked(False)
@@ -1837,25 +1859,16 @@ class App(QMainWindow):
             msg = QMessageBox()
             status = msg.question( self, 'Unload ' + sender.text(), 'Unload ' + sender.text() + ' and return carriage to the current position?',QMessageBox.Yes | QMessageBox.No  )
             if status == QMessageBox.Yes:
-                self.toolButtons[int(self.sender().text()[1:])].setChecked(False)
-                if len(self.cp_coords) > 0:
-                    #self.printer.gCode('T-1')
-                    self.printer.gCode('TOOL_DROPOFF')
-                    self.printer.gCode('G1 X' + str(self.cp_coords['X']))
-                    self.printer.gCode('G1 Y' + str(self.cp_coords['Y']))
-                    self.printer.gCode('G1 Z' + str(self.cp_coords['Z']))
-                else:
-                    tempCoords = self.printer.getCoords()
-                    #self.printer.gCode('T-1')
-                    self.printer.gCode('TOOL_DROPOFF')
-                    self.printer.gCode('G1 X' + str(tempCoords['X']))
-                    self.printer.gCode('G1 Y' + str(tempCoords['Y']))
-                    self.printer.gCode('G1 Z' + str(tempCoords['Z']))
+                for button in self.toolButtons:
+                    if button.text() == sender.text():
+                        button.setChecked(False)
+                self.changeTool(None)
                 # End video threads and restart default thread
                 self.video_thread.alignment = False
 
                 # Update GUI for unloading carriage
                 self.calibration_button.setDisabled(False)
+                self.calibrate_button.setDisabled(False)
                 self.cp_button.setDisabled(False)
                 self.updateMessagebar('Ready.')
                 self.updateStatusbar('Ready.')
@@ -1868,22 +1881,7 @@ class App(QMainWindow):
             status = msg.question( self, 'Confirm loading ' + sender.text(), 'Load ' + sender.text() + ' and move to current position?',QMessageBox.Yes | QMessageBox.No  )
             
             if status == QMessageBox.Yes:
-                # return carriage to controlled point position
-                if len(self.cp_coords) > 0:
-                    #self.printer.gCode('T-1')
-                    self.printer.gCode('TOOL_DROPOFF')
-                    self.printer.gCode(sender.text())
-                    self.printer.gCode('G1 X' + str(self.cp_coords['X']))
-                    self.printer.gCode('G1 Y' + str(self.cp_coords['Y']))
-                    self.printer.gCode('G1 Z' + str(self.cp_coords['Z']))
-                else:
-                    tempCoords = self.printer.getCoords()
-                    #self.printer.gCode('T-1')
-                    self.printer.gCode('TOOL_DROPOFF')
-                    self.printer.gCode(self.sender().text())
-                    self.printer.gCode('G1 X' + str(tempCoords['X']))
-                    self.printer.gCode('G1 Y' + str(tempCoords['Y']))
-                    self.printer.gCode('G1 Z' + str(tempCoords['Z']))
+                self.changeTool(sender.text())
                 # START DETECTION THREAD HANDLING
                 # close camera settings dialog so it doesn't crash
                 try:
@@ -1891,18 +1889,41 @@ class App(QMainWindow):
                         self.camera_dialog.reject()
                 except: None
                 # update GUI
-                self.cp_button.setDisabled(True)
+                self.cp_button.setDisabled(False)
                 self.jogpanel_button.setDisabled(False)
-                self.calibration_button.setDisabled(True)
+                self.calibration_button.setDisabled(False)
+                self.calibrate_button.setDisabled(False)
                 self.repeatSpinBox.setDisabled(True)
 
             else:
-                self.toolButtons[int(self.sender().text()[1:])].setChecked(False)
+                for button in self.toolButtons:
+                    if button.text() == sender.text():
+                        button.setChecked(False)
+#                self.toolButtons[int(self.sender().text()[1:])].setChecked(False)
+
+    def changeTool(self, tool=None):
+        # return carriage to controlled point position
+        #self.printer.gCode('T-1')
+        if len(self.cp_coords) > 0:
+            tempCoords = self.cp_coords
+        else:
+            tempCoords = self.printer.getCoords()
+
+        self.printer.gCode('TOOL_DROPOFF')
+
+        if tool is not None:
+            self.printer.gCode(tool)
+
+        self.printer.gCode('G1 X' + str(tempCoords['X']))
+        self.printer.gCode('G1 Y' + str(tempCoords['Y']))
+        self.printer.gCode('G1 Z' + str(tempCoords['Z']))
+
 
     def resetConnectInterface(self):
         self.connection_button.setDisabled(False)
         self.disconnection_button.setDisabled(True)
         self.calibration_button.setDisabled(True)
+        self.calibrate_button.setDisabled(True)
         self.cp_button.setDisabled(True)
         self.jogpanel_button.setDisabled(True)
         self.offsets_box.setVisible(False)
@@ -1942,6 +1963,8 @@ class App(QMainWindow):
         # display crosshair on video feed at center of image
         self.crosshair = True
         self.calibration_button.setDisabled(True)
+        self.calibrate_button.setDisabled(True)
+
 
         if len(self.cp_coords) > 0:
             #self.printer.gCode('T-1')
@@ -1977,6 +2000,8 @@ class App(QMainWindow):
         self.video_thread.xray = False
         self.video_thread.alignment = False
         self.calibration_button.setDisabled(False)
+        self.calibrate_button.setDisabled(False)
+
         self.cp_button.setDisabled(False)
 
         self.toolBox.setVisible(True)
@@ -2242,6 +2267,8 @@ class App(QMainWindow):
         self.connection_button.setDisabled(True)
         self.disconnection_button.setDisabled(True)
         self.calibration_button.setDisabled(True)
+        self.calibrate_button.setDisabled(True)
+
         self.cp_button.setDisabled(True)
         self.cp_button.setText('Pending..')
         self.jogpanel_button.setDisabled(True)
@@ -2269,18 +2296,19 @@ class App(QMainWindow):
         # Wait for printer to stop moving and unload tools
         _ret_error = self.printer.gCode('M400')
         if self.printer.isIdle():
-            tempCoords = self.printer.getCoords()
-            #_ret_error += self.printer.gCode('T-1')
-            _ret_error += self.printer.gCode('TOOL_DROPOFF')
-            # return carriage to controlled point position
-            if len(self.cp_coords) > 0:
-                _ret_error += self.printer.gCode('G1 X' + str(self.cp_coords['X']))
-                _ret_error += self.printer.gCode('G1 Y' + str(self.cp_coords['Y']))
-                _ret_error += self.printer.gCode('G1 Z' + str(self.cp_coords['Z']))
-            else:
-                _ret_error += self.printer.gCode('G1 X' + str(tempCoords['X']))
-                _ret_error += self.printer.gCode('G1 Y' + str(tempCoords['Y']))
-                _ret_error += self.printer.gCode('G1 Z' + str(tempCoords['Z']))
+            self.changeTool(None)
+#            tempCoords = self.printer.getCoords()
+#            #_ret_error += self.printer.gCode('T-1')
+#            _ret_error += self.printer.gCode('TOOL_DROPOFF')
+#            # return carriage to controlled point position
+#            if len(self.cp_coords) > 0:
+#                _ret_error += self.printer.gCode('G1 X' + str(self.cp_coords['X']))
+#                _ret_error += self.printer.gCode('G1 Y' + str(self.cp_coords['Y']))
+#                _ret_error += self.printer.gCode('G1 Z' + str(self.cp_coords['Z']))
+#            else:
+#                _ret_error += self.printer.gCode('G1 X' + str(tempCoords['X']))
+#                _ret_error += self.printer.gCode('G1 Y' + str(tempCoords['Y']))
+#                _ret_error += self.printer.gCode('G1 Z' + str(tempCoords['Z']))
         # update status with disconnection state
         if _ret_error == 0:
             self.updateStatusbar('Disconnected.')
@@ -2298,6 +2326,7 @@ class App(QMainWindow):
         self.connection_button.setDisabled(False)
         self.disconnection_button.setDisabled(True)
         self.calibration_button.setDisabled(True)
+        self.calibrate_button.setDisabled(True)
         self.cp_button.setDisabled(True)
         self.cp_button.setText('Set Controlled Point..')
         self.jogpanel_button.setDisabled(True)
@@ -2314,10 +2343,27 @@ class App(QMainWindow):
     def runCalibration(self):
         # reset debugString
         self.debugString = ''
+        # get requested tool number
+        sender = self.sender()
+
         # prompt for user to apply results
         msgBox = QMessageBox(parent=self)
         msgBox.setIcon(QMessageBox.Information)
-        msgBox.setText('Do you want to start automated tool alignment?')
+
+        # update buttons to new status
+        if sender.text() == 'Auto Tool Alignment':
+            msgBox.setText('Do you want to start automated tool alignment?')
+            self.video_thread.toolNames=[]
+            for button in self.toolButtons:
+                self.video_thread.toolNames.append(button.text().replace('T', ''))
+        else:
+            msgBox.setText('Do you want to start tool alignment for current tool?')
+            self.video_thread.toolNames=[]
+            for button in self.toolButtons:
+                if button.isChecked():
+                    self.video_thread.toolNames.append(button.text().replace('T', ''))
+            
+
         msgBox.setWindowTitle('Start Calibration')
         yes_button = msgBox.addButton('Start calibration..',QMessageBox.YesRole)
         yes_button.setObjectName('active')
@@ -2336,6 +2382,7 @@ class App(QMainWindow):
         self.cp_button.setDisabled(True)
         self.jogpanel_button.setDisabled(False)
         self.calibration_button.setDisabled(True)
+        self.calibrate_button.setDisabled(True)
         self.xray_box.setDisabled(False)
         self.xray_box.setChecked(False)
         self.xray_box.setVisible(True)
@@ -2366,6 +2413,9 @@ class App(QMainWindow):
         self.video_thread.xray = False
         self.video_thread.loose = False
         self.video_thread.alignment = True
+        
+    def runSubCalibration(self):
+        return None
 
     def toggle_xray(self):
         try:

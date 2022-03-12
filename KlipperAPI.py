@@ -66,14 +66,12 @@ class KlipperAPI:
         return '{"id": '+str(id)+', "method": "objects/query", "params": {"objects": {"toolhead": ["position"]}}}'
     
     def format_current_tool_request(self, id):
-        return '{"id": '+str(id)+', "method": "objects/query", "params": {"objects": {"toolhead": ["extruder"]}}}'
+        return '{"id": '+str(id)+', "method": "objects/query", "params": {"objects": {"toollock": ["tool_current"]}}}'
+#        return '{"id": '+str(id)+', "method": "objects/query", "params": {"objects": {"toolhead": ["extruder"]}}}'
     
     def format_objects_list(self, id):
         return '{"id": '+str(id)+', "method": "objects/list"}'
     
-    def format_curenttool_request(self, id):
-        return '{"id": '+str(id)+', "method": "objects/query", "params": {"objects": {"toollock": ["tool_current"]}}}'
-
     def format_tool_offset_request(self, id, tool):
         return '{"id": '+str(id)+', "method": "objects/query", "params": {"objects": {"tool '+str(tool)+'": ["offset"]}}}'
 
@@ -244,6 +242,19 @@ class KlipperAPI:
         except:
             sys.stderr.write("ERROR: Unable to parse data\n")
    
+    def get_CurrentTool(self):
+        self.increment_id()
+        self.send_current_tool_request(self.id)
+        j = json.loads(self.wait_for_response())
+        if str(j['id']) != str(self.id):
+            return 'error: Incorrect ID returned'
+        if 'error' in j:
+            j = j['error']['message']
+            return 'error: '+str(j)
+        elif 'result' in j:
+            j = j['result']['status']['toollock']['tool_current']
+        return j
+
     def send_tool_offset_request(self, id,  tool):
         request = self.format_tool_offset_request(id,tool)
         try:
@@ -517,7 +528,7 @@ class KlipperAPI:
         return False
     
     def getCurrentTool(self):
-        return 0 # Needs updating
+        return self.get_CurrentTool()
     
     def getHeaters(self): # Not currently used
         return ''

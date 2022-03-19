@@ -688,7 +688,7 @@ class CalibrateNozzles(QThread):
                                     # process GUI events
                                     app.processEvents()
                                     # apply offsets to machine
-                                    self.parent().printer.gCode( 'G10 P' + tool + ' X' + str(c['X']) + ' Y' + str(c['Y']) )
+                                    #self.parent().printer.gCode( 'G10 P' + tool + ' X' + str(c['X']) + ' Y' + str(c['Y']) )
                             # signal end of execution
                             self._running = False
                         # Update status bar
@@ -697,7 +697,7 @@ class CalibrateNozzles(QThread):
                         # Update debug window with results
                         # self.parent().debugString += '\nCalibration output:\n'
                         #self.printer.gCode('T-1')
-                        self.printer.gCode('TOOL_DROPOFF')
+                        self.parent().printer.gCode('TOOL_DROPOFF')
                         self.parent().printer.gCode('G1 X' + str(self.parent().cp_coords['X']))
                         self.parent().printer.gCode('G1 Y' + str(self.parent().cp_coords['Y']))
                         self.parent().printer.gCode('G1 Z' + str(self.parent().cp_coords['Z']))
@@ -707,6 +707,8 @@ class CalibrateNozzles(QThread):
                         self.display_crosshair = False
                         self._running = False
                         self.calibration_complete.emit()
+#                        self.parent().readyToCalibrate()
+#                        self.parent().resetConnectInterface()
                     except Exception as mn1:
                         self.alignment = False
                         self.detection_on = False
@@ -919,6 +921,8 @@ class CalibrateNozzles(QThread):
         self.calibration_moves = 0
 
         while True:
+            time.sleep(1)
+
             (self.xy, self.target, self.tool_coordinates, self.radius) = self.analyzeFrame()
             # analyzeFrame has returned our target coordinates, average its location and process according to state
             self.average_location[0] += self.xy[0]
@@ -966,7 +970,16 @@ class CalibrateNozzles(QThread):
                     self.message_update.emit('Calibrating rotation.. (' + str(self.state*10) + '%)')
                     # check if we've already moved, and calculate mpp value
                     if self.state == 1:
-                        self.mpp = np.around(0.5/self.getDistance(self.oldxy[0],self.oldxy[1],self.xy[0],self.xy[1]),4)
+                        distance = self.getDistance(self.oldxy[0],self.oldxy[1],self.xy[0],self.xy[1])
+                        if distance == 0:
+                            self.parent().debugString += 'Camera calibration failed because of no movement, could be to close to camera or too slow camera.\n'
+                            print('Camera calibration failed because of no movement, could be to close to camera or too slow camera.')
+                            print('self.oldxy[0]:' + str(self.oldxy[0]))
+                            print('self.oldxy[1]:' + str(self.oldxy[1]))
+                            print('self.xy[0]:' + str(self.xy[0]))
+                            print('self.xy[1]:' + str(self.xy[1]))
+                            break
+                        self.mpp = np.around(0.5/distance,4)
                     # save position as previous position
                     self.oldxy = self.xy
                     # save machine coordinates for detected nozzle
@@ -1064,8 +1077,16 @@ class CalibrateNozzles(QThread):
                         x_tableitem.setBackground(QColor(100,255,100,255))
                         y_tableitem = QTableWidgetItem(string_final_y)
                         y_tableitem.setBackground(QColor(100,255,100,255))
-                        self.parent().offsets_table.setItem(tool,0,x_tableitem)
-                        self.parent().offsets_table.setItem(tool,1,y_tableitem)
+
+                        row_no = 0
+                        items = self.parent().offsets_table.findItems('T'+str(tool), Qt.MatchExactly)
+                        print('len(items):' + str(len(items)))
+                        if len(items) == 1 :  # we have found our row
+                            item = items[0]  # take the first
+                            print('items.row:' + str(items[0].row))
+                            row_no = item.row
+                        self.parent().offsets_table.setItem(row_no,0,x_tableitem)
+                        self.parent().offsets_table.setItem(row_no,1,y_tableitem)
                         self.result_update.emit({
                             'tool': str(tool),
                             'cycle': str(rep),
@@ -1903,20 +1924,19 @@ class App(QMainWindow):
 
     def changeTool(self, tool=None):
         # return carriage to controlled point position
-        #self.printer.gCode('T-1')
         if len(self.cp_coords) > 0:
             tempCoords = self.cp_coords
         else:
             tempCoords = self.printer.getCoords()
 
-        self.printer.gCode('TOOL_DROPOFF')
-
         if tool is not None:
             self.printer.gCode(tool)
+        else:
+            self.printer.gCode('TOOL_DROPOFF')
 
-        self.printer.gCode('G1 X' + str(tempCoords['X']))
-        self.printer.gCode('G1 Y' + str(tempCoords['Y']))
-        self.printer.gCode('G1 Z' + str(tempCoords['Z']))
+        self.printer.gCode('G1 X' + str(tempCoords['X']) + 'F24000')
+        self.printer.gCode('G1 Y' + str(tempCoords['Y']) + 'F24000')
+        self.printer.gCode('G1 Z' + str(tempCoords['Z']) + 'F24000')
 
 
     def resetConnectInterface(self):
@@ -2021,31 +2041,31 @@ class App(QMainWindow):
                 self.camera_dialog.reject()
         except: None
         # prompt for user to apply results
-        msgBox = QMessageBox(parent=self)
-        msgBox.setIcon(QMessageBox.Information)
-        msgBox.setText('Do you want to save the new offsets to your machine?')
-        msgBox.setWindowTitle('Calibration Results')
-        yes_button = msgBox.addButton('Apply offsets and save (M500)',QMessageBox.ApplyRole)
-        yes_button.setStyleSheet(style_green)
-        cancel_button = msgBox.addButton('Apply offsets',QMessageBox.NoRole)
+#        msgBox = QMessageBox(parent=self)
+#        msgBox.setIcon(QMessageBox.Information)
+#        msgBox.setText('Do you want to save the new offsets to your machine?')
+#        msgBox.setWindowTitle('Calibration Results')
+#        yes_button = msgBox.addButton('Apply offsets and save (M500)',QMessageBox.ApplyRole)
+#        yes_button.setStyleSheet(style_green)
+#        cancel_button = msgBox.addButton('Apply offsets',QMessageBox.NoRole)
         
         # Update debug string
-        self.debugString += '\nCalibration results:\n'
-        for result in self.calibrationResults:
-            calibrationCode = 'G10 P' + str(result['tool']) + ' X' + str(result['X']) + ' Y' + str(result['Y'])
-            self.debugString += calibrationCode + '\n'
+#        self.debugString += '\nCalibration results:\n'
+#        for result in self.calibrationResults:
+#            calibrationCode = 'G10 P' + str(result['tool']) + ' X' + str(result['X']) + ' Y' + str(result['Y'])
+#            self.debugString += calibrationCode + '\n'
 
         # Prompt user
-        returnValue = msgBox.exec()
-        if msgBox.clickedButton() == yes_button:
-            for result in self.calibrationResults:
-                calibrationCode = 'G10 P' + str(result['tool']) + ' X' + str(result['X']) + ' Y' + str(result['Y'])
-                self.printer.gCode(calibrationCode)
-                self.printer.gCode('M500 P10') # because of Rene.
-            self.statusBar.showMessage('Offsets applied and stored using M500.')
-            print('Offsets applied and stored using M500.')
-        else:
-            self.statusBar.showMessage('Temporary offsets applied. You must manually save these offsets.')
+ #       returnValue = msgBox.exec()
+ #       if msgBox.clickedButton() == yes_button:
+ #           for result in self.calibrationResults:
+ #               calibrationCode = 'G10 P' + str(result['tool']) + ' X' + str(result['X']) + ' Y' + str(result['Y'])
+ #               self.printer.gCode(calibrationCode)
+ #               self.printer.gCode('M500 P10') # because of Rene.
+ #           self.statusBar.showMessage('Offsets applied and stored using M500.')
+ #           print('Offsets applied and stored using M500.')
+ #       else:
+ #           self.statusBar.showMessage('Temporary offsets applied. You must manually save these offsets.')
         # Clean up threads and detection
         self.video_thread.alignment = False
         self.video_thread.detect_on = False
@@ -2187,6 +2207,11 @@ class App(QMainWindow):
         for index in range(self.num_tools):
             # create array of results for current tool
             _rawCalibrationData = [line for line in self.calibrationResults if line['tool'] == str(index)]
+            
+            # If we have not run this particular tool
+            if len(_rawCalibrationData) < 1:
+                continue
+
             x_array = [float(line['X']) for line in _rawCalibrationData]
             y_array = [float(line['Y']) for line in _rawCalibrationData]
             mpp_value = np.average([float(line['mpp']) for line in _rawCalibrationData])

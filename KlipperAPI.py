@@ -205,6 +205,7 @@ class KlipperAPI:
             sys.stderr.write("ERROR: Unable to parse data\n")
     
     def get_abs_position(self, axis=None):
+ #       time.sleep(1.5)
         self.increment_id()
         self.send_abs_position_request(self.id)
         j = json.loads(self.wait_for_response())
@@ -280,6 +281,7 @@ class KlipperAPI:
         return j
     
     def set_tool_offset(self, tool_num, newX=None, newY=None, newZ=None):
+        return None
         current_offset = self.get_tool_offset(tool_num)
         self.config_location = self.get_config_location()
         search_text = '[gcode_macro T'+ str(tool_num) + ']'

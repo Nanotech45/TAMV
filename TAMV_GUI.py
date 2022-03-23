@@ -697,7 +697,7 @@ class CalibrateNozzles(QThread):
                         # Update debug window with results
                         # self.parent().debugString += '\nCalibration output:\n'
                         #self.printer.gCode('T-1')
-                        self.parent().printer.gCode('TOOL_DROPOFF')
+                        #self.parent().printer.gCode('TOOL_DROPOFF')
                         self.parent().printer.gCode('G1 X' + str(self.parent().cp_coords['X']))
                         self.parent().printer.gCode('G1 Y' + str(self.parent().cp_coords['Y']))
                         self.parent().printer.gCode('G1 Z' + str(self.parent().cp_coords['Z']))
@@ -707,8 +707,6 @@ class CalibrateNozzles(QThread):
                         self.display_crosshair = False
                         self._running = False
                         self.calibration_complete.emit()
-#                        self.parent().readyToCalibrate()
-#                        self.parent().resetConnectInterface()
                     except Exception as mn1:
                         self.alignment = False
                         self.detection_on = False
@@ -1055,8 +1053,21 @@ class CalibrateNozzles(QThread):
                         # Update GUI with progress
                         # calculate final offsets and return results
                         self.tool_offsets = self.parent().printer.getG10ToolOffset(tool)
-                        final_x = np.around( (self.cp_coordinates['X'] + self.tool_offsets['X']) - self.tool_coordinates['X'], 3 )
-                        final_y = np.around( (self.cp_coordinates['Y'] + self.tool_offsets['Y']) - self.tool_coordinates['Y'], 3 )
+                        old_final_x = np.around( (self.cp_coordinates['X'] + self.tool_offsets['X']) - self.tool_coordinates['X'], 3 )
+                        print('T'+str(tool) + ' final_x=' + str(self.cp_coordinates['X']) + ' + ' + str(self.tool_offsets['X']) + ' - ' + str(self.tool_coordinates['X']) )
+                        old_final_y = np.around( (self.cp_coordinates['Y'] + self.tool_offsets['Y']) - self.tool_coordinates['Y'], 3 )
+                        print('T'+str(tool) + ' final_y=' + str(self.cp_coordinates['Y']) + ' + ' + str(self.tool_offsets['Y']) + ' - ' + str(self.tool_coordinates['Y']) )
+                        old_string_final_x = "{:.3f}".format(old_final_x)
+                        old_string_final_y = "{:.3f}".format(old_final_y)
+
+                        final_x = np.around( ( self.tool_coordinates['X'] + self.tool_offsets['X'] ) - self.cp_coordinates['X'], 3 )
+                        final_y = np.around( ( self.tool_coordinates['Y'] + self.tool_offsets['Y'] ) - self.cp_coordinates['Y'], 3 )
+
+                        alt_final_x = np.around( self.cp_coordinates['X'] - self.tool_offsets['X'] - self.tool_coordinates['X'], 3 )
+                        alt_final_y = np.around( self.cp_coordinates['Y'] - self.tool_offsets['Y'] - self.tool_coordinates['Y'], 3 )
+
+                        alt_string_final_x = "{:.3f}".format(alt_final_x)
+                        alt_string_final_y = "{:.3f}".format(alt_final_y)
                         string_final_x = "{:.3f}".format(final_x)
                         string_final_y = "{:.3f}".format(final_y)
                         # Save offset to output variable
@@ -1073,18 +1084,32 @@ class CalibrateNozzles(QThread):
                         self.parent().printer.gCode( 'G1 F13200' )
 
                         self.parent().debugString += 'G10 P' + str(tool) + ' X' + string_final_x + ' Y' + string_final_y + '\n'
+                        self.parent().debugString += 'alt_G10 P' + str(tool) + ' X' + alt_string_final_x + ' Y' + alt_string_final_y + '\n'
+                        self.parent().debugString += 'old_G10 P' + str(tool) + ' X' + old_string_final_x + ' Y' + old_string_final_y + '\n'
                         x_tableitem = QTableWidgetItem(string_final_x)
                         x_tableitem.setBackground(QColor(100,255,100,255))
                         y_tableitem = QTableWidgetItem(string_final_y)
                         y_tableitem.setBackground(QColor(100,255,100,255))
 
+
+                        print('G10 P' + str(tool) + ' X' + string_final_x + ' Y' + string_final_y + '\n')
+                        print('altG10 P' + str(tool) + ' X' + alt_string_final_x + ' Y' + alt_string_final_y + '\n')
+                        print('oldG10 P' + str(tool) + ' X' + old_string_final_x + ' Y' + old_string_final_y + '\n')
+
                         row_no = 0
-                        items = self.parent().offsets_table.findItems('T'+str(tool), Qt.MatchExactly)
-                        print('len(items):' + str(len(items)))
-                        if len(items) == 1 :  # we have found our row
-                            item = items[0]  # take the first
-                            print('items.row:' + str(items[0].row))
-                            row_no = item.row
+                        for row in range(self.parent().offsets_table.rowCount()):
+                            header = self.parent().offsets_table.verticalHeaderItem(row)
+                            print('Row:' + str(row_no) + ', header.text():' + str(header.text()))
+                            if str(header.text()) == str('T'+str(tool)):
+                                row_no = row
+                                print('Found on row:' + str(row_no))
+
+#                        items = self.parent().offsets_table.findItems('T'+str(tool), Qt.MatchExactly)
+#                        print('len(items):' + str(len(items)))
+#                        if len(items) == 1 :  # we have found our row
+#                            item = items[0]  # take the first
+#                            print('items.row:' + str(items[0].row))
+#                            row_no = item.row
                         self.parent().offsets_table.setItem(row_no,0,x_tableitem)
                         self.parent().offsets_table.setItem(row_no,1,y_tableitem)
                         self.result_update.emit({
@@ -1804,7 +1829,7 @@ class App(QMainWindow):
                 # UPDATE OFFSET INFORMATION
                 self.offsets_box.setVisible(True)
                 self.offsets_table.setRowCount(self.num_tools)
-                for i in range(self.num_tools):
+                for i in range(self.num_tools): 
                     current_tool = self.printer.getG10ToolOffset(self.tools[i])
                     offset_x = "{:.3f}".format(current_tool['X'])
                     offset_y = "{:.3f}".format(current_tool['Y'])

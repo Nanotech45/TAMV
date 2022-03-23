@@ -75,6 +75,8 @@ class KlipperAPI:
     def format_tool_offset_request(self, id, tool):
         return '{"id": '+str(id)+', "method": "objects/query", "params": {"objects": {"tool '+str(tool)+'": ["offset"]}}}'
 
+    def format_tool_is_virtual_request(self, id, tool):
+        return '{"id": '+str(id)+', "method": "objects/query", "params": {"objects": {"tool '+str(tool)+'": ["is_virtual"]}}}'
    
     def wait_for_response(self):
         wait = True
@@ -270,6 +272,19 @@ class KlipperAPI:
     def get_tool_offset(self, tool_num=None):
         self.increment_id()
         self.send_tool_offset_request(self.id, tool_num)
+        j = json.loads(self.wait_for_response())
+        if str(j['id']) != str(self.id):
+            return 'error: Incorrect ID returned'
+        if 'error' in j:
+            j = j['error']['message']
+            return 'error: '+str(j)
+        elif 'result' in j:
+            j = j['result']['status']['tool '+str(tool_num)]['offset']
+        return j
+    
+    def get_tool_is_virtual(self, tool_num=None):
+        self.increment_id()
+        self.send_tool_is_virtual_request(self.id, tool_num)
         j = json.loads(self.wait_for_response())
         if str(j['id']) != str(self.id):
             return 'error: Incorrect ID returned'
@@ -503,8 +518,18 @@ class KlipperAPI:
 #        return int(self.get_num_extruders())
     
     def getTools(self):
-        #return int(self.get_tools())
-        return self.get_tools()
+#        return int(self.get_tools())
+        tools = self.get_tools()
+        return tools
+        realtools = list()
+
+        for t in tools:
+            is_virtual = self.get_tool_offset(t)
+            if is_virtual:
+                realtools.append(t)
+
+        return tools
+        return realtools
 
     def getStatus(self):
         return self.get_status()
